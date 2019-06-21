@@ -51,6 +51,7 @@ async function facebookLogin(request, response) {
 }
 
 async function facebookCallback(request, response) {
+  console.log('function facebookCallback', request.cookies[OAUTH_COOKIE]);
   OAUTH_CONFIG.secret = await get(OAUTH_SECRET)
       .then((credential) => {
         return credential;
@@ -71,6 +72,7 @@ async function facebookCallback(request, response) {
     method: 'get',
     url: `https://graph.facebook.com/v3.3/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${token}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook`,
   }).then((res) => {
+    console.log('74: ', request.cookies);
     getNameFromToken(response, request, res.data.access_token);
   }).catch(() => {
     response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
