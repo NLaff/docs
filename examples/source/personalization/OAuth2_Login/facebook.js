@@ -40,6 +40,7 @@ examples.all('/callback/facebook', facebookCallback);
 async function facebookLogin(request, response) {
   const returnUrl = request.query ? request.query.return : '';
   response.cookie(OAUTH_COOKIE, {returnUrl});
+  OAUTH_CONFIG.returnUrl = returnUrl;
   OAUTH_CONFIG.id = await get(OAUTH_ID)
       .then((credential) => {
         return credential;
@@ -97,7 +98,7 @@ function getNameFromToken(response, request, token) {
 }
 
 function generateReturnURL(cookie, success = false) {
-  return `${cookie.returnUrl}#success=${success}`;
+  return `${OAUTH_CONFIG.returnUrl}#success=${success}`;
 }
 
 module.exports = examples;
