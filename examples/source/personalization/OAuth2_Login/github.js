@@ -17,7 +17,6 @@
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const axios = require('axios');
 const randomString = require('randomstring');
 const fetch = require('node-fetch');
 const config = require('@lib/config');
@@ -44,7 +43,7 @@ async function getConfig() {
     state: randomString.generate(8),
     secret: await credentials.get(OAUTH_SECRET_KEY),
     id: await credentials.get(OAUTH_ID_KEY),
-  }
+  };
 }
 
 // eslint-disable-next-line new-cap
@@ -54,18 +53,18 @@ examples.use(cookieParser());
 // Name of the cookie that holds information about the OAuth flow
 const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
-examples.all('/login/github', async (request, response, next) => {
+examples.all('/login/github', async (request, response) => {
   oauthConfig = oauthConfig || await getConfig();
 
   response.cookie(OAUTH_COOKIE_NAME, {
-    returnUrl: request.query.return || ''
+    returnUrl: request.query.return || '',
   });
 
-  console.log('redirect uri', `${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  // eslint-disable-next max-len
   response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
 });
 
-examples.all('/callback/github', async (request, response, next) => {
+examples.all('/callback/github', async (request, response) => {
   oauthConfig = oauthConfig || await getConfig();
 
   const code = request.query.code;
@@ -83,8 +82,8 @@ examples.all('/callback/github', async (request, response, next) => {
   const accessToken = (await fetch(`https://github.com/login/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${code}`, {
     method: 'post',
     headers: {
-      accept: 'application/json'
-    }
+      accept: 'application/json',
+    },
   })).json();
 
   // After a token has been retrieved it should be possible to get the users
@@ -97,7 +96,7 @@ examples.all('/callback/github', async (request, response, next) => {
 
   const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE], {
     loggedInWith: 'github',
-    name: name.login
+    name: name.login,
   });
   response.cookie(OAUTH_COOKIE_NAME, cookie);
   response.redirect(`${cookie.returnUrl}#success=${!!name.login}`);
