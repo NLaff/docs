@@ -80,9 +80,10 @@ async function facebookCallback(request, response) {
 }
 
 function getNameFromToken(response, request, token) {
+  console.log('82: ', request.cookies[OAUTH_COOKIE]);
   axios({
     method: 'get',
-    url: 'https://graph.facebook.com/v3.1/me',
+    url: 'https://graph.facebook.com/v3.3/me',
     headers: {
       'Authorization': `Bearer ${token}`,
     },
