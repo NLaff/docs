@@ -18,84 +18,89 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const axios = require('axios');
-const {get} = require('@lib/utils/credentials');
 const randomString = require('randomstring');
+const fetch = require('node-fetch');
+const config = require('@lib/config');
+const credentials = require('@lib/utils/credentials');
+
+// A oauthConfig object created by .getConfig() - initially empty, will
+// be filled when the router is called the first time
+let oauthConfig = null;
+
+/**
+ * Returns a object with all oauthConfiguration keys needed to get the
+ * authentication running
+ * @return {Object}
+ */
+async function getConfig() {
+  if (oauthConfig) {
+    return oauthConfig;
+  }
+
+  const OAUTH_ID_KEY = 'github_client_id';
+  const OAUTH_SECRET_KEY = 'github_client_secret';
+
+  return {
+    state: randomString.generate(8),
+    secret: await credentials.get(OAUTH_SECRET_KEY),
+    id: await credentials.get(OAUTH_ID_KEY),
+  }
+}
 
 // eslint-disable-next-line new-cap
 const examples = express.Router();
 examples.use(cookieParser());
 
-const OAUTH_COOKIE = 'oauth2_cookie';
-const OAUTH_ID = 'github_client_id';
-const OAUTH_SECRET = 'github_client_secret';
-const OAUTH_CONFIG = {
-  state: randomString.generate(8),
-};
+// Name of the cookie that holds information about the OAuth flow
+const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
-examples.all('/login/github', githubLogin);
-examples.all('/callback/github', githubCallback);
+examples.all('/login/github', async (request, response, next) => {
+  oauthConfig = oauthConfig || await getConfig();
 
-async function githubLogin(request, response) {
-  const returnUrl = request.query ? request.query.return : '';
-  response.cookie(OAUTH_COOKIE, {returnUrl});
-  OAUTH_CONFIG.id = await get(OAUTH_ID)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  response.redirect(`https://github.com/login/oauth/authorize?client_id=${OAUTH_CONFIG.id}&state=${OAUTH_CONFIG.state}`);
-}
+  response.cookie(OAUTH_COOKIE_NAME, {
+    returnUrl: request.query.return || ''
+  });
 
-async function githubCallback(request, response) {
-  OAUTH_CONFIG.secret = await get(OAUTH_SECRET)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  const token = request.query.code;
-  const state = request.query.state;
-  if (!token) {
+  console.log('redirect uri', `${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+});
+
+examples.all('/callback/github', async (request, response, next) => {
+  oauthConfig = oauthConfig || await getConfig();
+
+  const code = request.query.code;
+  if (!code) {
     response.status(400).send('Missing OAuth2 code');
+    return;
   }
-  if (state !== OAUTH_CONFIG.state) {
+
+  const state = request.query.state;
+  if (state !== oauthConfig.state) {
     response.status(400).send('Invalid OAuth2 state');
     return;
   }
-  axios({
+
+  const accessToken = (await fetch(`https://github.com/login/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${code}`, {
     method: 'post',
-    url: `https://github.com/login/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${token}`,
     headers: {
-      accept: 'application/json',
-    },
-  }).then((res) => {
-    getNameFromToken(response, request, res.data.access_token);
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
+      accept: 'application/json'
+    }
+  })).json();
 
-function getNameFromToken(response, request, token) {
-  axios({
-    method: 'get',
-    url: 'https://api.github.com/user',
+  // After a token has been retrieved it should be possible to get the users
+  // name via the API
+  const name = (await fetch('https://api.github.com/user', {
     headers: {
-      'Authorization': `token ${token}`,
+      'Authorization': `token ${accessToken.token}`,
     },
-  }).then((res) => {
-    // eslint-disable-next-line max-len
-    response.cookie(OAUTH_COOKIE, Object.assign(request.cookies[OAUTH_COOKIE], {loggedInWith: 'github', name: res.data.login}));
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], true));
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
+  })).json();
 
-function generateReturnURL(cookie, success = false) {
-  return `${cookie.returnUrl}#success=${success}`;
-}
+  const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE], {
+    loggedInWith: 'github',
+    name: name.login
+  });
+  response.cookie(OAUTH_COOKIE_NAME, cookie);
+  response.redirect(`${cookie.returnUrl}#success=${!!name.login}`);
+});
 
 module.exports = examples;
