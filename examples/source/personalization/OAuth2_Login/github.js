@@ -60,8 +60,10 @@ examples.all('/login/github', async (request, response) => {
     returnUrl: request.query.return || '',
   });
 
+  // eslint-disable-next-line max-len
+  console.log(`&re$direct_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/github`);
   // eslint-disable-next max-len
-  response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}`);
 });
 
 examples.all('/callback/github', async (request, response) => {
@@ -98,6 +100,7 @@ examples.all('/callback/github', async (request, response) => {
     loggedInWith: 'github',
     name: name.login,
   });
+  console.log(cookie);
   response.cookie(OAUTH_COOKIE_NAME, cookie);
   response.redirect(`${cookie.returnUrl}#success=${!!name.login}`);
 });
