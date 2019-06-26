@@ -61,7 +61,7 @@ examples.all('/login/github', async (request, response) => {
   });
 
   // eslint-disable-next max-len
-  response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/github`);
 });
 
 examples.all('/callback/github', async (request, response) => {
@@ -79,22 +79,22 @@ examples.all('/callback/github', async (request, response) => {
     return;
   }
 
-  const accessToken = (await fetch(`https://github.com/login/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${code}`, {
+  const accessToken = await (fetch(`https://github.com/login/oauth/access_token?client_id=${oauthConfig.id}&client_secret=${oauthConfig.secret}&code=${code}`, {
     method: 'post',
     headers: {
       accept: 'application/json',
     },
-  })).json();
+  }).then((res) => res.json()));
 
   // After a token has been retrieved it should be possible to get the users
   // name via the API
-  const name = (await fetch('https://api.github.com/user', {
+  const name = await (fetch('https://api.github.com/user', {
     headers: {
-      'Authorization': `token ${accessToken.token}`,
+      'Authorization': `token ${accessToken.access_token}`,
     },
-  })).json();
+  }).then((res) => res.json()));
 
-  const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE], {
+  const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE_NAME], {
     loggedInWith: 'github',
     name: name.login,
   });
