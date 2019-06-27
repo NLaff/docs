@@ -17,88 +17,94 @@
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const axios = require('axios');
-const config = require('@lib/config');
-const {get} = require('@lib/utils/credentials');
 const randomString = require('randomstring');
+const fetch = require('node-fetch');
+const config = require('@lib/config');
+const credentials = require('@lib/utils/credentials');
+
+// A oauthConfig object created by .getConfig() - initially empty, will
+// be filled when the router is called the first time
+let oauthConfig = null;
+
+/**
+ * Returns a object with all oauthConfiguration keys needed to get the
+ * authentication running
+ * @return {Object}
+ */
+async function getConfig() {
+  if (oauthConfig) {
+    return oauthConfig;
+  }
+
+  const OAUTH_ID_KEY = 'facebook_client_id';
+  const OAUTH_SECRET_KEY = 'facebook_client_secret';
+
+  return {
+    state: randomString.generate(8),
+    secret: await credentials.get(OAUTH_SECRET_KEY),
+    id: await credentials.get(OAUTH_ID_KEY),
+    scopes: '',
+  };
+}
 
 // eslint-disable-next-line new-cap
 const examples = express.Router();
 examples.use(cookieParser());
 
-const OAUTH_COOKIE = 'oauth2_cookie';
-const OAUTH_ID = 'facebook_client_id';
-const OAUTH_SECRET = 'facebook_client_secret';
-const OAUTH_CONFIG = {
-  scopes: '',
-  state: randomString.generate(8),
-};
+// Name of the cookie that holds information about the OAuth flow
+const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
-examples.all('/login/facebook', facebookLogin);
-examples.all('/callback/facebook', facebookCallback);
+examples.all('/login/facebook', async (request, response) => {
+  oauthConfig = oauthConfig || await getConfig();
 
-async function facebookLogin(request, response) {
-  const returnUrl = request.query ? request.query.return : '';
-  response.cookie(OAUTH_COOKIE, {returnUrl});
-  OAUTH_CONFIG.returnUrl = returnUrl;
-  OAUTH_CONFIG.id = await get(OAUTH_ID)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  response.redirect(`https://www.facebook.com/v3.3/dialog/oauth?client_id=${OAUTH_CONFIG.id}&response_type=code&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook&state=${OAUTH_CONFIG.state}&scope=${OAUTH_CONFIG.scopes}&display=popup`);
-}
+  response.cookie(OAUTH_COOKIE_NAME, {
+    returnUrl: request.query.return || '',
+  });
 
-async function facebookCallback(request, response) {
-  console.log('function facebookCallback', request.cookies[OAUTH_COOKIE]);
-  OAUTH_CONFIG.secret = await get(OAUTH_SECRET)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  const token = request.query.code;
-  const state = request.query.state;
-  if (!token) {
+  // eslint-disable-next-line max-len
+  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  // eslint-disable-next max-len
+  response.redirect(`https://www.facebook.com/v3.3/dialog/oauth?response_type=code&client_id=${oauthConfig.id}&scope=${oauthConfig.scopes}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook&display=popup`);
+});
+
+examples.all('/callback/facebook', async (request, response) => {
+  oauthConfig = oauthConfig || await getConfig();
+
+  const code = request.query.code;
+  if (!code) {
     response.status(400).send('Missing OAuth2 code');
+    return;
   }
-  if (state !== OAUTH_CONFIG.state) {
+
+  const state = request.query.state;
+  if (state !== oauthConfig.state) {
     response.status(400).send('Invalid OAuth2 state');
     return;
   }
-  axios({
-    method: 'get',
-    url: `https://graph.facebook.com/v3.3/oauth/access_token?client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${token}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook`,
-  }).then((res) => {
-    console.log('74: ', request.cookies);
-    getNameFromToken(response, request, res.data.access_token);
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
 
-function getNameFromToken(response, request, token) {
-  console.log('82: ', request.cookies[OAUTH_COOKIE]);
-  axios({
-    method: 'get',
-    url: 'https://graph.facebook.com/v3.3/me',
+  const accessToken = await (fetch(`https://graph.facebook.com/v3.3/oauth/access_token?client_id=${oauthConfig.id}&client_secret=${oauthConfig.secret}&code=${code}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook`, {
+    method: 'post',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
     },
-  }).then((res) => {
-    // eslint-disable-next-line max-len
-    response.cookie(OAUTH_COOKIE, Object.assign(request.cookies[OAUTH_COOKIE], {loggedInWith: 'facebook', name: res.data.name}));
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], true));
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
+  }).then((res) => res.json()));
 
-function generateReturnURL(cookie, success = false) {
-  return `${OAUTH_CONFIG.returnUrl}#success=${success}`;
-}
+  // After a token has been retrieved it should be possible to get the users
+  // name via the API
+  const name = await (fetch('https://graph.facebook.com/v3.3/me', {
+    method: 'get',
+    headers: {
+      'Authorization': `Bearer ${accessToken.access_token}`,
+    },
+  }).then((res) => res.json()));
+
+  const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE_NAME], {
+    loggedInWith: 'facebook',
+    name: name.name,
+  });
+  console.log(cookie);
+  response.cookie(OAUTH_COOKIE_NAME, cookie);
+  response.redirect(`${cookie.returnUrl}#success=${!!name.name}`);
+});
 
 module.exports = examples;
