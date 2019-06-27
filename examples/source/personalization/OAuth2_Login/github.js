@@ -61,7 +61,7 @@ examples.all('/login/github', async (request, response) => {
   });
 
   // eslint-disable-next-line max-len
-  console.log(`&re$direct_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
   // eslint-disable-next max-len
   response.redirect(`https://github.com/login/oauth/authorize?client_id=${oauthConfig.id}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
 });
