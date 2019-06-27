@@ -17,87 +17,93 @@
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const axios = require('axios');
-const config = require('@lib/config');
-const {get} = require('@lib/utils/credentials');
 const randomString = require('randomstring');
+const fetch = require('node-fetch');
+const config = require('@lib/config');
+const credentials = require('@lib/utils/credentials');
+
+// A oauthConfig object created by .getConfig() - initially empty, will
+// be filled when the router is called the first time
+let oauthConfig = null;
+
+/**
+ * Returns a object with all oauthConfiguration keys needed to get the
+ * authentication running
+ * @return {Object}
+ */
+async function getConfig() {
+  if (oauthConfig) {
+    return oauthConfig;
+  }
+
+  const OAUTH_ID_KEY = 'google_client_id';
+  const OAUTH_SECRET_KEY = 'google_client_secret';
+
+  return {
+    state: randomString.generate(8),
+    secret: await credentials.get(OAUTH_SECRET_KEY),
+    id: await credentials.get(OAUTH_ID_KEY),
+    scopes: 'openid profile',
+  };
+}
 
 // eslint-disable-next-line new-cap
 const examples = express.Router();
 examples.use(cookieParser());
 
-const OAUTH_COOKIE = 'oauth2_cookie';
-const OAUTH_ID = 'google_client_id';
-const OAUTH_SECRET = 'google_client_secret';
-const OAUTH_CONFIG = {
-  scopes: 'openid profile',
-  state: randomString.generate(8),
-};
+// Name of the cookie that holds information about the OAuth flow
+const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
-examples.all('/login/google', googleLogin);
-examples.all('/callback/google', googleCallback);
+examples.all('/login/google', async (request, response) => {
+  oauthConfig = oauthConfig || await getConfig();
 
-async function googleLogin(request, response) {
-  const returnUrl = request.query ? request.query.return : '';
-  response.cookie(OAUTH_COOKIE, {returnUrl});
-  OAUTH_CONFIG.id = await get(OAUTH_ID)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?response_type=code&scope=${OAUTH_CONFIG.scopes}&client_id=${OAUTH_CONFIG.id}&redirect_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/google&state=${OAUTH_CONFIG.state}`);
-}
+  response.cookie(OAUTH_COOKIE_NAME, {
+    returnUrl: request.query.return || '',
+  });
 
-async function googleCallback(request, response) {
-  OAUTH_CONFIG.secret = await get(OAUTH_SECRET)
-      .then((credential) => {
-        return credential;
-      })
-      .catch(() => {
-        response.status(400).send('Invalid OAuth2 credentials');
-      });
-  const token = request.query.code;
-  const state = request.query.state;
-  if (!token) {
+  // eslint-disable-next-line max-len
+  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  // eslint-disable-next max-len
+  response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${oauthConfig.id}&scope=${oauthConfig.scopes}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/google`);
+});
+
+examples.all('/callback/google', async (request, response) => {
+  oauthConfig = oauthConfig || await getConfig();
+
+  const code = request.query.code;
+  if (!code) {
     response.status(400).send('Missing OAuth2 code');
+    return;
   }
-  if (state !== OAUTH_CONFIG.state) {
+
+  const state = request.query.state;
+  if (state !== oauthConfig.state) {
     response.status(400).send('Invalid OAuth2 state');
     return;
   }
-  axios({
+
+  const accessToken = await (fetch(`https://accounts.google.com/o/oauth2/token?grant_type=authorization_code&client_id=${oauthConfig.id}&client_secret=${oauthConfig.secret}&code=${code}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/google`, {
     method: 'post',
-    url: `https://accounts.google.com/o/oauth2/token?grant_type=authorization_code&client_id=${OAUTH_CONFIG.id}&client_secret=${OAUTH_CONFIG.secret}&code=${token}&redirect_uri=${config.hosts.platform.base}/documentation/examples/personalization/oauth2_login/callback/google`,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-  }).then((res) => {
-    getNameFromToken(response, request, res.data.access_token);
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
+  }).then((res) => res.json()));
 
-function getNameFromToken(response, request, token) {
-  axios({
-    method: 'get',
-    url: 'https://www.googleapis.com/oauth2/v3/userinfo',
+  // After a token has been retrieved it should be possible to get the users
+  // name via the API
+  const name = await (fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      'Authorization': `Bearer ${accessToken.access_token}`,
     },
-  }).then((res) => {
-    // eslint-disable-next-line max-len
-    response.cookie(OAUTH_COOKIE, Object.assign(request.cookies[OAUTH_COOKIE], {loggedInWith: 'google', name: res.data.name}));
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], true));
-  }).catch(() => {
-    response.redirect(generateReturnURL(request.cookies[OAUTH_COOKIE], false));
-  });
-}
+  }).then((res) => res.json()));
 
-function generateReturnURL(cookie, success = false) {
-  return `${cookie.returnUrl}#success=${success}`;
-}
+  const cookie = Object.assign({}, request.cookies[OAUTH_COOKIE_NAME], {
+    loggedInWith: 'google',
+    name: name.name,
+  });
+  console.log(cookie);
+  response.cookie(OAUTH_COOKIE_NAME, cookie);
+  response.redirect(`${cookie.returnUrl}#success=${!!name.name}`);
+});
 
 module.exports = examples;
