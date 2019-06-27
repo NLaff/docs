@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /**
  * Copyright 2019 The AMP HTML Authors. All Rights Reserved.
  *
@@ -54,7 +55,14 @@ examples.use(cookieParser());
 const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
 examples.all('/login/github', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ QUERY] ${JSON.stringify(request.query, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
+
+  response.set({
+    'Cache-Control': 'no-cache',
+  });
 
   response.cookie(OAUTH_COOKIE_NAME, {
     returnUrl: request.query.return || '',
@@ -67,6 +75,8 @@ examples.all('/login/github', async (request, response) => {
 });
 
 examples.all('/callback/github', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
 
   const code = request.query.code;

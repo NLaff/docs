@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /**
  * Copyright 2019 The AMP HTML Authors. All Rights Reserved.
  *
@@ -55,19 +56,28 @@ examples.use(cookieParser());
 const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
 examples.all('/login/facebook', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ QUERY] ${JSON.stringify(request.query, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
+
+  response.set({
+    'Cache-Control': 'no-cache',
+  });
 
   response.cookie(OAUTH_COOKIE_NAME, {
     returnUrl: request.query.return || '',
   });
 
   // eslint-disable-next-line max-len
-  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook`);
   // eslint-disable-next max-len
   response.redirect(`https://www.facebook.com/v3.3/dialog/oauth?response_type=code&client_id=${oauthConfig.id}&scope=${oauthConfig.scopes}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/facebook&display=popup`);
 });
 
 examples.all('/callback/facebook', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
 
   const code = request.query.code;

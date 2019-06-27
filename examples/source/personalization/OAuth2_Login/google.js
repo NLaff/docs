@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 /**
  * Copyright 2019 The AMP HTML Authors. All Rights Reserved.
  *
@@ -55,19 +56,28 @@ examples.use(cookieParser());
 const OAUTH_COOKIE_NAME = 'oauth2_cookie';
 
 examples.all('/login/google', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ QUERY] ${JSON.stringify(request.query, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
+
+  response.set({
+    'Cache-Control': 'no-cache',
+  });
 
   response.cookie(OAUTH_COOKIE_NAME, {
     returnUrl: request.query.return || '',
   });
 
   // eslint-disable-next-line max-len
-  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/github`);
+  console.log(`[REDIRECT_URI] ${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/google`);
   // eslint-disable-next max-len
   response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${oauthConfig.id}&scope=${oauthConfig.scopes}&state=${oauthConfig.state}&redirect_uri=${config.hosts.preview.base}/documentation/examples/personalization/oauth2_login/callback/google`);
 });
 
 examples.all('/callback/google', async (request, response) => {
+  console.log(`${new Date().toLocaleTimeString()} [ORIGINAL URL] ${request.protocol}://${request.get('host')}${request.originalUrl}`);
+  console.log(`${new Date().toLocaleTimeString()} [REQ COOKIES] ${JSON.stringify(request.cookies, null, 2)}`);
   oauthConfig = oauthConfig || await getConfig();
 
   const code = request.query.code;
