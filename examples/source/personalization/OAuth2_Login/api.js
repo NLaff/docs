@@ -35,6 +35,9 @@ function oAuthStatus(request, response) {
 }
 
 function logOut(request, response) {
+  response.set({
+    'Cache-Control': 'no-cache',
+  });
   let returnUrl = request.query ? request.query.return : '';
   returnUrl += '#success=true';
   response.clearCookie(OAUTH_COOKIE);
